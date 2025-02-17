@@ -1,5 +1,7 @@
 ﻿// Copyright © 2025 Always Active Technologies PTY Ltd
 
+using Microsoft.EntityFrameworkCore;
+using TechAptV1.Client.Data;
 using TechAptV1.Client.Models;
 
 namespace TechAptV1.Client.Services;
@@ -11,16 +13,19 @@ public sealed class DataService
 {
     private readonly ILogger<DataService> _logger;
     private readonly IConfiguration _configuration;
+    private readonly AppDbContext _dbContext;
 
     /// <summary>
     /// Default constructor providing DI Logger and Configuration
     /// </summary>
     /// <param name="logger"></param>
     /// <param name="configuration"></param>
-    public DataService(ILogger<DataService> logger, IConfiguration configuration)
+    public DataService(ILogger<DataService> logger, IConfiguration configuration,AppDbContext dbContext)
     {
-        this._logger = logger;
-        this._configuration = configuration;
+        _logger = logger;
+        _configuration = configuration;
+        _dbContext = dbContext;
+        _dbContext.Database.EnsureCreated();
     }
 
     /// <summary>
@@ -29,8 +34,25 @@ public sealed class DataService
     /// <param name="dataList"></param>
     public async Task Save(List<Number> dataList)
     {
-        this._logger.LogInformation("Save");
-        throw new NotImplementedException();
+        try
+        {
+            _logger.LogInformation("Save");
+
+            if (dataList.Count == 0)
+            {
+                return;
+            }
+
+            var values = string.Join(",", dataList.Select(x => $"({x.Value}, {x.IsPrime})"));
+            var sql = $"INSERT INTO Numbers (Value, IsPrime) VALUES {values}";
+
+            await _dbContext.Database.ExecuteSqlRawAsync(sql);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to Save");
+            throw;
+        }
     }
 
     /// <summary>
@@ -38,19 +60,21 @@ public sealed class DataService
     /// </summary>
     /// <param name="count"></param>
     /// <returns></returns>
-    public IEnumerable<Number> Get(int count)
+    public async Task<List<Number>> Get(int count)
     {
-        this._logger.LogInformation("Get");
-        throw new NotImplementedException();
+        _logger.LogInformation("Get");
+
+        return await _dbContext.Numbers.OrderBy(x => x.Value).Take(count).ToListAsync();
     }
 
     /// <summary>
     /// Fetch All the records from the SQLite Database
     /// </summary>
     /// <returns></returns>
-    public IEnumerable<Number> GetAll()
+    public async Task<List<Number>> GetAll()
     {
         this._logger.LogInformation("GetAll");
-        throw new NotImplementedException();
+
+        return await _dbContext.Numbers.ToListAsync();
     }
 }

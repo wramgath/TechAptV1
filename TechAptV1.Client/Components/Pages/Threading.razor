@@ -1,26 +1,48 @@
 ﻿@page "/threading"
+@using TechAptV1.Client.Services
+
+@inject ThreadingService _threadingService
 
 <h3>Threading &amp; Data Persistence</h3>
 
 <div>
-    <button class="btn btn-primary" @onclick="(async () => await this.Start())">Start</button>
-    <button class="btn btn-primary" @onclick="(async () => await this.Save())">Save</button>
+    <button disabled="@isComputing" class="btn btn-primary" @onclick="(async () => await this.Start())">Start</button>
+    <button disabled="@(!isComputingComplete)" class="btn btn-primary" @onclick="(async () => await this.Save())">Save</button>
 </div>
 <div>
     <hr>
     <h4>Numbers:</h4>
     <ul>
-        <li>Odd: <strong>@this._oddNumbers</strong></li>
-        <li>Even: <strong>@this._evenNumbers</strong></li>
-        <li>Prime: <strong>@this._primeNumbers</strong></li>
-        <li>Total: <strong>@this._totalNumbers</strong></li>
+        <li>Odd: <strong>@_threadingService.GetOddNumbers().Count</strong></li>
+        <li>Even: <strong>@_threadingService.GetEvenNumbers().Count</strong></li>
+        <li>Prime: <strong>@_threadingService.GetPrimeNumbers().Count</strong></li>
+        <li>Total: <strong>@_threadingService.GetTotalNumbers().Count</strong></li>
     </ul>
     <hr>
+</div>
+
+<div class="modal" style="display: @(isLoading ? "block" : "none")">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-body" style="background-color:silver;">
+                <div class="d-flex justify-content-center align-items-center">
+                    <div class="spinner-border text-primary" role="status" style="margin-right:10px;"></div>
+                    <p class="mb-0">@modalText</p>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
 @code {
 
     [Inject] public required ILogger<Threading> Logger { get; set; }
+
+    private bool isLoading = false;
+    private string modalText = "Please wait...Computing Data!";
+
+    private bool isComputing = false;
+    private bool isComputingComplete = true;
 
     private int _oddNumbers = 0;
     private int _evenNumbers = 0;
@@ -30,13 +52,44 @@
     private async Task Start()
     {
         this.Logger.LogInformation("Start");
-        throw new NotImplementedException();
+
+        this.isComputing = true;
+        this.isLoading = true;
+        StateHasChanged();
+        await Task.Delay(1000);
+
+        await _threadingService.Start();
+
+        this.isLoading = false;
+        this.isComputing = false;
+
+        this.isComputingComplete = _threadingService.GetTotalNumbers().Count > 0;
+
+        await UpdateUI();
     }
 
     private async Task Save()
     {
         this.Logger.LogInformation("Save");
-        throw new NotImplementedException();
+
+        this.isLoading = true;
+        modalText = "Please wait...Saving Data!";
+        StateHasChanged();
+        await Task.Delay(1000);
+
+        await _threadingService.Save();
+        this.isLoading = false;
+    }
+
+    private async Task UpdateUI()
+    {
+        while(_threadingService.GetTotalNumbers().Count <= 10_000_000)
+        {
+            await Task.Delay(500);
+
+            StateHasChanged();
+
+        }
     }
 
 }

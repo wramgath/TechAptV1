@@ -1,6 +1,13 @@
 ﻿@page "/results"
+@using System.Text
+@using TechAptV1.Client.Interfaces
 @using TechAptV1.Client.Models
 @using TechAptV1.Client.Services
+
+@inject DataService _dataService
+@inject IXmlService _xmlService
+@inject IBinaryService _binaryService
+@inject IJSRuntime JSRuntime
 
 <h3>Results</h3>
 <p>The table shows the top N numbers generated. The download XML and Binary feature allows you to download the entire data set</p>
@@ -9,31 +16,52 @@
     <button class="btn btn-primary" @onclick="(async () => await this.DownloadXml())">Download XML</button>
     <button class="btn btn-primary" @onclick="(async () => await this.DownloadBinary())">Download Binary</button>
 </div>
-<div>
-    <table class="table">
+<div class="d-flex">
+    <table class="table" style="height:200px">
         <thead>
-        <tr>
-            <th>Value</th>
-            <th>IsPrime</th>
-        </tr>
+            <tr>
+                <th>Value</th>
+                <th>IsPrime</th>
+            </tr>
         </thead>
         <tbody>
-        @foreach (var item in this.numbers)
-        {
-            <tr>
-                <td>@item.Value</td>
-                <td>@item.IsPrime</td>
-            </tr>
-        }
+            @foreach (var item in this.numbers)
+            {
+                <tr>
+                    <td>@item.Value</td>
+                    <td>@item.IsPrime</td>
+                </tr>
+            }
         </tbody>
     </table>
+</div>
+
+<div class="modal" style="display: @(isLoading ? "block" : "none")">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-body" style="background-color:silver;">
+                <div class="d-flex justify-content-center align-items-center">
+                    <div class="spinner-border text-primary" role="status" style="margin-right:10px;"></div>
+                    <p class="mb-0">Please wait... Converting file</p>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
 @code {
 
     [Inject] public required ILogger<Threading> Logger { get; set; }
 
+    private bool isLoading = false;
+
     private List<Number> numbers = new ();
+    private List<Number> allNumbers = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        numbers = await _dataService.Get(20);
+    }
 
     /// <summary>
     /// Fetches all the records, serializes them to XML and downloads the file
@@ -41,7 +69,38 @@
     private async Task DownloadXml()
     {
         this.Logger.LogInformation("DownloadXml");
-        throw new NotImplementedException();
+
+        this.isLoading = true;
+
+        StateHasChanged();
+
+        await Task.Delay(1000);
+
+        allNumbers = await _dataService.GetAll();
+
+        string tempFilePath = Path.GetTempFileName();
+
+        try
+        {
+            using (var fs = new FileStream(tempFilePath, FileMode.Create))
+            {
+                await _xmlService.ConvertToXmlAsync(allNumbers, fs);
+            }
+
+            using (var fs = new FileStream(tempFilePath, FileMode.Open, FileAccess.Read))
+            {
+                using var streamRef = new DotNetStreamReference(stream: fs);
+                await JSRuntime.InvokeVoidAsync("downloadStream", "numbers.xml", streamRef, "xml");
+            }
+        }
+        finally
+        {
+            this.isLoading = false;
+            if (File.Exists(tempFilePath))
+            {
+                File.Delete(tempFilePath);
+            }
+        }
     }
 
     /// <summary>
@@ -50,7 +109,22 @@
     private async Task DownloadBinary()
     {
         this.Logger.LogInformation("DownloadBinary");
-        throw new NotImplementedException();
+
+        this.isLoading = true;
+        StateHasChanged();
+
+        await Task.Delay(1000);
+
+        allNumbers = await _dataService.GetAll();
+
+        using var stream = _binaryService.ConvertToBinary(allNumbers);
+
+        using var streamRef = new DotNetStreamReference(stream);
+
+        await JSRuntime.InvokeVoidAsync("downloadStream", "numbers.bin", streamRef, "binary");
+
+        this.isLoading = false;
+        await InvokeAsync(StateHasChanged);
     }
 
 }
